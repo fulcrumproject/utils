@@ -10,7 +10,7 @@ import (
 )
 
 // NewLogger configures the logger based on the log format and level from config
-func NewLogger(cfg *LogConf) *slog.Logger {
+func NewLogger(cfg *Conf) *slog.Logger {
 	var handler slog.Handler
 
 	// Configure the options with the log level

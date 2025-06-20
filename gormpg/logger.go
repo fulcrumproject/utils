@@ -9,7 +9,7 @@ import (
 )
 
 // NewGormLogger configures the logger based on the log format and level from config
-func NewGormLogger(cfg *DB) gormLogger.Interface {
+func NewGormLogger(cfg *Conf) gormLogger.Interface {
 	var handler slog.Handler
 
 	// Configure the options with the log level
