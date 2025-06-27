@@ -3,10 +3,9 @@ package gormpg
 import (
 	"fmt"
 	"regexp"
-	"strings"
 	"testing"
+	"time"
 
-	"github.com/google/uuid"
 	"gorm.io/gorm"
 )
 
@@ -19,9 +18,9 @@ type TestDB struct {
 
 // NewTestDB creates a new instance of TestDB
 func NewTestDB(t *testing.T, cfg *Conf, migrate func(db *gorm.DB) error) *TestDB {
-	// Generate a unique database name using properties.UUID without hyphens
-	uuidStr := strings.Replace(uuid.New().String(), "-", "", -1)
-	dbName := fmt.Sprintf("fulcrum_test_%s", uuidStr)
+	// Generate a unique database name using timestamp for better ordering
+	timestamp := time.Now().Format("20060102_150405_000000")
+	dbName := fmt.Sprintf("fulcrum_test_%s", timestamp)
 
 	// Connect to default fulcrum database to create the test database
 	adminDB, err := NewConnection(cfg)
