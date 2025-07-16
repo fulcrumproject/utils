@@ -13,18 +13,18 @@ import (
 
 // DatabaseConfig represents a nested configuration structure
 type DatabaseConfig struct {
-	Host     string `json:"host" env:"DB_HOST" validate:"required,hostname_rfc1123"`
-	Port     int    `json:"port" env:"DB_PORT" validate:"required,min=1,max=65535"`
-	Username string `json:"username" env:"DB_USERNAME" validate:"required,min=3"`
-	Password string `json:"password" env:"DB_PASSWORD" validate:"required,min=8"`
-	SSL      bool   `json:"ssl" env:"DB_SSL"`
+	Host     string `json:"host" env:"HOST" validate:"required,hostname_rfc1123"`
+	Port     int    `json:"port" env:"PORT" validate:"required,min=1,max=65535"`
+	Username string `json:"username" env:"USERNAME" validate:"required,min=3"`
+	Password string `json:"password" env:"PASSWORD" validate:"required,min=8"`
+	SSL      bool   `json:"ssl" env:"SSL"`
 }
 
 // ServerConfig represents another nested structure
 type ServerConfig struct {
-	Name    string        `json:"name" env:"SERVER_NAME" validate:"required,alphanum,min=3,max=20"`
-	Timeout time.Duration `json:"timeout" env:"SERVER_TIMEOUT" validate:"required"`
-	Workers uint          `json:"workers" env:"SERVER_WORKERS" validate:"min=1,max=100"`
+	Name    string        `json:"name" env:"NAME" validate:"required,alphanum,min=3,max=20"`
+	Timeout time.Duration `json:"timeout" env:"TIMEOUT" validate:"required"`
+	Workers uint          `json:"workers" env:"WORKERS" validate:"min=1,max=100"`
 }
 
 // TestConfig includes all supported field types, validation, and nested structs
@@ -54,8 +54,8 @@ type TestConfig struct {
 	AllowedIPs []string `json:"allowed_ips" env:"ALLOWED_IPS" validate:"dive,ip"`
 
 	// Nested structs
-	Database DatabaseConfig `json:"database"`
-	Server   ServerConfig   `json:"server"`
+	Database DatabaseConfig `json:"database" env:"DB"`
+	Server   ServerConfig   `json:"server" env:"SERVER"`
 
 	// Fields without env tags (should remain unchanged)
 	InternalID string `json:"internal_id"`
@@ -610,4 +610,62 @@ func TestGenericBuilder_FieldsWithoutEnvTags(t *testing.T) {
 	assert.Equal(t, "new-name", cfg.AppName)
 	assert.Equal(t, "internal-123", cfg.InternalID)     // Should remain unchanged
 	assert.Equal(t, "unexported-value", cfg.unexported) // Unexported fields preserved
+}
+
+func TestGenericBuilder_ConcatenatedEnvTags(t *testing.T) {
+	t.Run("nested struct env tag concatenation", func(t *testing.T) {
+		setEnvVars(t, map[string]string{
+			// These should work with concatenated env tags:
+			// Database struct has env:"DB", Database.Host has env:"HOST" -> "TEST_DB_HOST"
+			// Server struct has env:"SERVER", Server.Name has env:"NAME" -> "TEST_SERVER_NAME"
+			"TEST_DB_HOST":        "concat-db-host",
+			"TEST_DB_PORT":        "9999",
+			"TEST_DB_USERNAME":    "concat-user",
+			"TEST_SERVER_NAME":    "concatserver",
+			"TEST_SERVER_TIMEOUT": "45s",
+			"TEST_SERVER_WORKERS": "25",
+		})
+
+		defaultCfg := newTestConfig()
+		cfg, err := New(defaultCfg).EnvPrefix("TEST_").EnvTag("env").Build()
+		require.NoError(t, err)
+
+		// Verify database config values were set from concatenated env vars
+		assert.Equal(t, "concat-db-host", cfg.Database.Host)
+		assert.Equal(t, 9999, cfg.Database.Port)
+		assert.Equal(t, "concat-user", cfg.Database.Username)
+		assert.Equal(t, "testpass123", cfg.Database.Password) // Should remain default since TEST_DB_PASSWORD not set
+
+		// Verify server config values were set from concatenated env vars
+		assert.Equal(t, "concatserver", cfg.Server.Name)
+		assert.Equal(t, 45*time.Second, cfg.Server.Timeout)
+		assert.Equal(t, uint(25), cfg.Server.Workers)
+	})
+
+	t.Run("parent struct without env tag", func(t *testing.T) {
+		// Test case where parent struct field doesn't have env tag
+		type NestedConfig struct {
+			Value string `env:"VALUE"`
+		}
+		type ParentConfig struct {
+			AppName string       `env:"APP_NAME"`
+			Nested  NestedConfig // No env tag on parent
+		}
+
+		setEnvVars(t, map[string]string{
+			"TEST_APP_NAME": "parent-app",
+			"TEST_VALUE":    "nested-value", // Should use just the field's env tag
+		})
+
+		defaultCfg := &ParentConfig{
+			AppName: "default-app",
+			Nested:  NestedConfig{Value: "default-value"},
+		}
+
+		cfg, err := New(defaultCfg).EnvPrefix("TEST_").EnvTag("env").Build()
+		require.NoError(t, err)
+
+		assert.Equal(t, "parent-app", cfg.AppName)
+		assert.Equal(t, "nested-value", cfg.Nested.Value)
+	})
 }

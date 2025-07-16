@@ -113,7 +113,7 @@ func (b *Builder[T]) Build() (T, error) {
 	}
 
 	// Load environment variables into struct
-	if err := loadEnvToStruct(target, b.envPrefix, b.envTag); err != nil {
+	if err := loadEnvToStruct(target, b.envPrefix, b.envTag, ""); err != nil {
 		return config, fmt.Errorf("failed to override configuration from environment: %w", err)
 	}
 
@@ -127,7 +127,7 @@ func (b *Builder[T]) Build() (T, error) {
 }
 
 // loadEnvToStruct loads environment variables into struct fields and nested structs based on tags
-func loadEnvToStruct(target any, prefix, tag string) error {
+func loadEnvToStruct(target any, prefix, tag, parentEnvPath string) error {
 	v := reflect.ValueOf(target)
 
 	// Dereference all pointer levels to get to the actual value
@@ -154,7 +154,20 @@ func loadEnvToStruct(target any, prefix, tag string) error {
 		if fieldValue.Kind() == reflect.Struct {
 			// Skip time.Duration which is technically a struct but should be treated as primitive
 			if field.Type != reflect.TypeOf(time.Duration(0)) {
-				if err := loadEnvToStruct(fieldValue.Addr().Interface(), prefix, tag); err != nil {
+				// Get the env tag for this struct field to build the path
+				fieldEnvTag, hasEnvTag := field.Tag.Lookup(tag)
+				var newEnvPath string
+				if hasEnvTag && fieldEnvTag != "" {
+					if parentEnvPath == "" {
+						newEnvPath = fieldEnvTag
+					} else {
+						newEnvPath = parentEnvPath + "_" + fieldEnvTag
+					}
+				} else {
+					newEnvPath = parentEnvPath
+				}
+
+				if err := loadEnvToStruct(fieldValue.Addr().Interface(), prefix, tag, newEnvPath); err != nil {
 					return fmt.Errorf("error loading sub config field %s: %w", field.Name, err)
 				}
 			}
@@ -165,8 +178,16 @@ func loadEnvToStruct(target any, prefix, tag string) error {
 			continue
 		}
 
+		// Build the full environment variable name by concatenating parent path with current field env tag
+		var fullEnvVar string
+		if parentEnvPath == "" {
+			fullEnvVar = envVar
+		} else {
+			fullEnvVar = parentEnvPath + "_" + envVar
+		}
+
 		// Get value from environment or skip if empty
-		envValue := os.Getenv(prefix + envVar)
+		envValue := os.Getenv(prefix + fullEnvVar)
 		if envValue == "" {
 			continue
 		}
