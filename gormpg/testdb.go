@@ -28,6 +28,11 @@ func NewTestDB(t *testing.T, cfg *Conf, migrate func(db *gorm.DB) error) *TestDB
 	if err != nil {
 		t.Fatalf("Failed to connect to postgres database: %v", err)
 	}
+	defer func() {
+		if sqlDB, derr := adminDB.DB(); derr == nil {
+			_ = sqlDB.Close()
+		}
+	}()
 
 	// Create the test database
 	sql := fmt.Sprintf("DROP DATABASE IF EXISTS %s", dbName)
@@ -89,6 +94,11 @@ func (tdb *TestDB) Cleanup(t *testing.T) {
 		t.Errorf("Failed to connect to postgres database: %v", err)
 		return
 	}
+	defer func() {
+		if sqlDB, derr := adminDB.DB(); derr == nil {
+			_ = sqlDB.Close()
+		}
+	}()
 
 	// Force close all connections to the test database
 	sql := fmt.Sprintf(`
